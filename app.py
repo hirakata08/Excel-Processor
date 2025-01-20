@@ -6,7 +6,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import MergedCell
 
-class YogiboData:
+class MainData:
     def __init__(self, file_data):
         self.data = pd.read_csv(BytesIO(file_data), encoding='shift_jis')
         self.data.columns = self.data.columns.str.strip()
@@ -25,14 +25,14 @@ class ExcelProcessor:
         self.excel = pd.ExcelFile(BytesIO(file_data))
         self.sheet_names = self.excel.sheet_names
 
-    def update_subsheet_shipment_quantity(self, yogibo_data, output_file):
+    def update_subsheet_shipment_quantity(self, main_data, output_file):
         with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
             self._process_main_sheet(writer)
 
             for sheet in self.sheet_names[1:]:
                 subsheet_data, original_headers = self._load_subsheet(sheet)
                 if '商品コード' in subsheet_data.columns and '出荷数' in subsheet_data.columns:
-                    self._update_shipment_quantities(subsheet_data, yogibo_data, sheet)
+                    self._update_shipment_quantities(subsheet_data, main_data, sheet)
 
                 original_headers.to_excel(writer, sheet_name=sheet, index=False, header=False, startrow=0)
                 subsheet_data.to_excel(writer, sheet_name=sheet, index=False, header=False, startrow=3)
@@ -54,10 +54,10 @@ class ExcelProcessor:
         subsheet_data.columns = subsheet_data.columns.str.strip()
         return subsheet_data, original_headers
 
-    def _update_shipment_quantities(self, subsheet_data, yogibo_data, sheet_name):
+    def _update_shipment_quantities(self, subsheet_data, main_data, sheet_name):
         for i, row in subsheet_data.iterrows():
             item_code = str(row['商品コード']).strip()
-            total_shipment = yogibo_data.get_total_shipment_quantity(sheet_name, item_code)
+            total_shipment = main_data.get_total_shipment_quantity(sheet_name, item_code)
             if total_shipment is not None:
                 subsheet_data.at[i, '出荷数'] = total_shipment
             else:
@@ -150,17 +150,17 @@ class ExcelProcessor:
 
 st.title("Excel ファイルの更新")
 
-yogibo_file = st.file_uploader("会社のファイルをアップロードする", type='csv')
+main_file = st.file_uploader("会社のファイルをアップロードする", type='csv')
 excel_file = st.file_uploader("月次レポートファイルをアップロードする", type='xlsx')
 
 # Process and Download buttons
-if yogibo_file and excel_file:
+if main_file and excel_file:
     if st.button("Process Data"):
         output_file = "output.xlsx"
         
-        yogibo_data = YogiboData(yogibo_file.read())
+        main_data = MainData(main_file.read())
         excel_processor = ExcelProcessor(excel_file.read())
-        excel_processor.update_subsheet_shipment_quantity(yogibo_data, output_file)
+        excel_processor.update_subsheet_shipment_quantity(main_data, output_file)
         
         st.session_state.processed_file = output_file  # Save the processed file in session state
         st.success("Data processed successfully!")
