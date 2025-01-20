@@ -148,11 +148,10 @@ class ExcelProcessor:
             
         workbook.save(file_path)
 
-# Streamlit interface
-st.title("Yogibo Data Processing")
+st.title("Excel ファイルの更新")
 
-yogibo_file = st.file_uploader("Upload Yogibo Data CSV", type='csv')
-excel_file = st.file_uploader("Upload Excel File", type='xlsx')
+yogibo_file = st.file_uploader("会社のファイルをアップロードする", type='csv')
+excel_file = st.file_uploader("月次レポートファイルをアップロードする", type='xlsx')
 
 # Process and Download buttons
 if yogibo_file and excel_file:
@@ -166,7 +165,7 @@ if yogibo_file and excel_file:
         st.session_state.processed_file = output_file  # Save the processed file in session state
         st.success("Data processed successfully!")
 
-    # Separate download button
+    # download button
     if 'processed_file' in st.session_state:
         with open(st.session_state.processed_file, 'rb') as f:
             st.download_button("Download Processed Excel", f, file_name="processed_file.xlsx")
