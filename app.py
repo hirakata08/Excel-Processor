@@ -4,19 +4,19 @@ import streamlit as st
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
-from openpyxl.cell.cell import MergedCell
+
 
 class MainData:
     def __init__(self, file_data):
-        self.data = pd.read_csv(BytesIO(file_data), encoding='shift_jis')
+        self.data = pd.read_csv(BytesIO(file_data), encoding='utf-8')
         self.data.columns = self.data.columns.str.strip()
 
     def get_total_shipment_quantity(self, destination_name, item_code):
         matching_rows = self.data[
-            (self.data['届け先名'].str.strip() == destination_name.strip()) & 
+            (self.data['届け先名'].str.strip() == destination_name.strip()) &
             (self.data['商品コード'].str.strip() == item_code.strip())
         ]
-        return matching_rows['出荷数'].sum() if not matching_rows.empty else None
+        return matching_rows['出荷実績検品数'].sum() if not matching_rows.empty else None
 
 
 class ExcelProcessor:
@@ -58,53 +58,62 @@ class ExcelProcessor:
         for i, row in subsheet_data.iterrows():
             item_code = str(row['商品コード']).strip()
             total_shipment = main_data.get_total_shipment_quantity(sheet_name, item_code)
-            if total_shipment is not None:
-                subsheet_data.at[i, '出荷数'] = total_shipment
-            else:
-                subsheet_data.at[i, '出荷数'] = 0
-                print(f"No match found for 商品コード '{item_code}' in subsheet '{sheet_name}'")
+            subsheet_data.at[i, '出荷数'] = total_shipment if total_shipment is not None else 0
 
     def _apply_formatting(self, file_path):
         original_workbook = load_workbook(BytesIO(self.file_data))  
         workbook = load_workbook(file_path)
-        book_original = original_workbook.active
-        book_target = workbook.active
         font_style = Font(name="MS PGothic", size=11)
-        max_col = book_target.max_column
-        max_row = book_target.max_row
-        book_target.auto_filter.ref = f"A1:{get_column_letter(max_col)}{max_row}"
-
-        for row in range(1, book_original.max_row + 1):
-            cell_value = book_original.cell(row=row, column=4).value
-            book_target.cell(row=row, column=4, value=cell_value)
-
         black_border = Border(
             left=Side(style="thin", color="000000"), 
             right=Side(style="thin", color="000000"),
             top=Side(style="thin", color="000000"), 
             bottom=Side(style="thin", color="000000")
         )
-
         dotted_border = Border(
             top=Side(style="dotted"),
             bottom=Side(style="dotted"),
             left=Side(style="dotted"),
             right=Side(style="dotted")
         )
+        
+        # Main Sheet Formatting
+        main_sheet = workbook.active
+        original_main_sheet = original_workbook.active
 
+        max_col = main_sheet.max_column
+        max_row = main_sheet.max_row
+        main_sheet.auto_filter.ref = f"A1:{get_column_letter(max_col)}{max_row}"
+
+        for row in range(1, original_main_sheet.max_row + 1):
+            cell_value = original_main_sheet.cell(row=row, column=4).value
+            main_sheet.cell(row=row, column=4, value=cell_value)
+
+        for col_id in range(1, original_main_sheet.max_column + 1):
+            col_letter = get_column_letter(col_id)
+            ori_width = original_main_sheet.column_dimensions[col_letter].width
+            main_sheet.column_dimensions[col_letter].width = ori_width
+
+        # Subsheet Formatting
         for sheet_name in self.sheet_names[1:]:
             sheet = workbook[sheet_name]
             original_sheet = original_workbook[sheet_name]
+
             for row in sheet.iter_rows():
                 for cell in row:
                     cell.font = font_style
+            sheet.freeze_panes = "A4"
 
+            for row in sheet.iter_rows(min_row=2, values_only=False):
+                for cell in row:
+                    cell.border = dotted_border
+
+            for row in sheet.iter_rows(min_row=1, max_row=3):
+                for cell in row:
+                    cell.border = black_border
+            
             sheet.merge_cells("A1:B2")
             title_cell = sheet["A1"]
-            C1_cell = sheet["C1"]
-            C1_cell.alignment = Alignment(horizontal="center", vertical="center")
-            C2_cell = sheet["C2"]
-            C2_cell.alignment = Alignment(horizontal="center", vertical="center")
             title_cell.font = Font(name="MS PGothic", size=16, bold=True)
             title_cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -123,49 +132,35 @@ class ExcelProcessor:
             for cell in ["A3", "B3", "C3", "D3"]:
                 sheet[cell].fill = header_fill_A3_D3
                 sheet[cell].alignment = Alignment(horizontal="center", vertical="center")
-
-            for col in sheet.iter_cols(min_col=3,max_col=4, min_row=4):
+            
+            for col in sheet.iter_cols(min_col=3, max_col=4, min_row=4):
                 for cell in col:
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            for row in sheet.iter_rows(min_row=2, values_only=False):
-                for cell in row:
-                    cell.border = dotted_border
-
-            for row in sheet.iter_rows(min_row=1, max_row=3):
-                for cell in row:
-                    cell.border = black_border
-
             for row in range(4, sheet.max_row + 1):
-                sheet.row_dimensions[row].height = 14.1
+                sheet.row_dimensions[row].height = 14.3
 
             for col_idx in range(1, original_sheet.max_column + 1):
                 column_letter = get_column_letter(col_idx)
                 original_width = original_sheet.column_dimensions[column_letter].width
                 sheet.column_dimensions[column_letter].width = original_width
-
-            sheet.freeze_panes = "A4"
-            
         workbook.save(file_path)
 
 st.title("Excel ファイルの更新")
 
-main_file = st.file_uploader("会社のファイルをアップロードする", type='csv')
-excel_file = st.file_uploader("月次レポートファイルをアップロードする", type='xlsx')
+main_file = st.file_uploader("会社のファイルをアップロードする (CSV)", type='csv')
+excel_file = st.file_uploader("月次レポートファイルをアップロードする (Excel)", type='xlsx')
 
-# Process and Download buttons
 if main_file and excel_file:
     if st.button("Process Data"):
         output_file = "output.xlsx"
-        
         main_data = MainData(main_file.read())
         excel_processor = ExcelProcessor(excel_file.read())
         excel_processor.update_subsheet_shipment_quantity(main_data, output_file)
         
-        st.session_state.processed_file = output_file  # Save the processed file in session state
+        st.session_state.processed_file = output_file
         st.success("Data processed successfully!")
 
-    # download button
     if 'processed_file' in st.session_state:
         with open(st.session_state.processed_file, 'rb') as f:
             st.download_button("Download Processed Excel", f, file_name="processed_file.xlsx")
