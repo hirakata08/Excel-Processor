@@ -47,4 +47,4 @@ typing_extensions
 tzdata 
 urllib3
 watchdog
-wheel==0.44.0
+wheel
